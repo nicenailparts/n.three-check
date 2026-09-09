@@ -1,1 +1,998 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>在庫チェックツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
+  :root{
+    --bg: #F2F2F2;
+    --panel: #FFFFFF;
+    --ink: #111111;
+    --ink-soft: #5C5C5C;
+    --border: #D0D0D0;
+    --accent: #111111;
+    --accent-soft: #E7E7E7;
+    --warn: #111111;
+    --warn-soft: #E2E2E2;
+    --danger: #111111;
+    --danger-soft: #FFFFFF;
+    --ok: #111111;
+    --ok-soft: #ECECEC;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .app{ display:flex; min-height:100vh; }
+
+  /* Sidebar */
+  .sidebar{
+    width: 208px;
+    flex-shrink:0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 20px 12px;
+    display:flex;
+    flex-direction:column;
+    gap: 4px;
+  }
+  .brand{
+    font-weight:700;
+    font-size:15px;
+    padding: 4px 10px 18px 10px;
+    letter-spacing: -0.01em;
+  }
+  .brand small{ display:block; font-weight:500; color:var(--ink-soft); font-size:11.5px; margin-top:2px; }
+  .navbtn{
+    text-align:left;
+    border:none;
+    background:transparent;
+    padding: 9px 10px;
+    border-radius:7px;
+    font-size: 13.5px;
+    font-weight:500;
+    color: var(--ink-soft);
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .navbtn:hover{ background: var(--accent-soft); color:var(--ink); }
+  .navbtn.active{ background: var(--accent); color:#fff; }
+  .navbtn .badge{
+    background: var(--danger);
+    color:#fff;
+    font-size:10.5px;
+    font-weight:600;
+    padding: 1px 6px;
+    border-radius: 20px;
+  }
+  .navbtn.active .badge{ background: rgba(255,255,255,0.28); }
+  .sidebar-foot{
+    margin-top:auto;
+    font-size:11.5px;
+    color: var(--ink-soft);
+    padding: 8px 10px;
+    border-top: 1px solid var(--border);
+    padding-top:12px;
+  }
+
+  /* Main */
+  .main{ flex:1; min-width:0; padding: 22px 28px 40px; }
+  h1{ font-size: 19px; margin:0 0 4px; letter-spacing:-0.01em; }
+  .subtitle{ color:var(--ink-soft); font-size: 13px; margin: 0 0 22px; max-width: 640px; }
+  .panel{
+    background: var(--panel);
+    border:1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin-bottom: 18px;
+  }
+  .panel h2{ font-size:14.5px; margin:0 0 4px; }
+  .panel .desc{ color:var(--ink-soft); font-size:12.5px; margin: 0 0 14px; }
+
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .btn{
+    border:1px solid var(--accent);
+    background: var(--accent);
+    color:#fff;
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    padding: 8px 16px;
+    border-radius:7px;
+    cursor:pointer;
+  }
+  .btn:hover{ filter:brightness(1.06); }
+  .btn:disabled{ opacity:0.45; cursor:not-allowed; }
+  .btn.secondary{ background:#fff; color:var(--accent); }
+  .btn.ghost{ background:transparent; color:var(--ink-soft); border-color:var(--border); }
+  .btn.danger{ background:#fff; color:var(--danger); border-color:var(--danger); }
+  .btn.small{ padding:4px 10px; font-size:12px; border-radius:6px; }
+
+  input[type="file"]{ font-size:12.5px; }
+  input[type="date"], input[type="number"], input[type="text"], select{
+    font-family:inherit;
+    font-size:13px;
+    padding:7px 9px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    background:#fff;
+    color:var(--ink);
+  }
+  label.field{ font-size:12px; color:var(--ink-soft); display:flex; flex-direction:column; gap:4px; }
+
+  table{ border-collapse: collapse; width:100%; font-size:12.5px; }
+  th, td{ padding:7px 9px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap; }
+  th{ color:var(--ink-soft); font-weight:600; font-size:11.5px; position:sticky; top:0; background:var(--panel); }
+  .numcell{ font-family:'IBM Plex Mono', monospace; text-align:right; }
+  .table-scroll{ max-height: calc(100vh - 210px); overflow:auto; border:1px solid var(--border); border-radius:8px; }
+  .col-latest{ font-weight:700; box-shadow: inset 2px 0 0 var(--ink); }
+
+  .tag{ display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:20px; font-size:11.5px; font-weight:700; border:1px solid var(--ink); }
+  .tag.warn{ background:#fff; color:var(--ink); border-style:dashed; }
+  .tag.danger{ background:var(--ink); color:#fff; }
+  .tag.ok{ background:#fff; color:var(--ink-soft); border-color:var(--border); font-weight:500; }
+  .tag.muted{ background:#F1F3F5; color:var(--ink-soft); border-color:var(--border); font-weight:500; }
+
+  .cell-flag-up{ background: var(--warn-soft); box-shadow: inset 0 0 0 1px var(--border); }
+  .cell-flag-down{ background: var(--ink); color:#fff; font-weight:700; }
+  .cell-flag-reviewed{ opacity:0.5; }
+
+  .empty{ text-align:center; color:var(--ink-soft); padding: 34px 10px; font-size:13px; }
+  .mapping-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(190px,1fr)); gap:10px; margin: 12px 0; }
+  .map-item{ border:1px solid var(--border); border-radius:8px; padding:10px 12px; }
+  .map-item .col-label{ font-size:11px; color:var(--ink-soft); margin-bottom:5px; }
+  .map-item select{ width:100%; }
+
+  .toast{
+    position:fixed; bottom:22px; right:22px; background:var(--ink); color:#fff;
+    padding:10px 16px; border-radius:8px; font-size:12.5px; box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    opacity:0; transform: translateY(6px); transition: all 0.25s ease; pointer-events:none; z-index:50;
+  }
+  .toast.show{ opacity:1; transform:translateY(0); }
+
+  .statgrid{ display:grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:6px; }
+  .stat{ border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+  .stat .num{ font-family:'IBM Plex Mono',monospace; font-size:21px; font-weight:600; }
+  .stat .lbl{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+
+  .search{ width:220px; }
+  .flagrow-actions{ display:flex; gap:6px; }
+  .settingsgrid{ display:flex; gap:22px; flex-wrap:wrap; align-items:flex-end; }
+  .warnbanner{ background:var(--warn-soft); color:#7a5310; border:1px solid #edd9ad; border-radius:8px; padding:10px 14px; font-size:12.5px; margin-bottom:14px; }
+
+  /* ---------- Mobile ---------- */
+  @media (max-width: 780px){
+    .app{ flex-direction: column; min-height: auto; }
+    .sidebar{
+      width: 100%;
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 10px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .brand{ display:none; }
+    .navbtn{
+      flex-shrink: 0;
+      white-space: nowrap;
+      padding: 8px 12px;
+    }
+    .sidebar-foot{ display:none; }
+    .main{ padding: 16px 14px 40px; }
+    h1{ font-size: 17px; }
+    .subtitle{ max-width: none; font-size: 12.5px; }
+    .panel{ padding: 14px 14px; border-radius: 8px; }
+    .row{ gap: 8px; }
+    .statgrid{ grid-template-columns: repeat(2, 1fr); }
+    .mapping-grid{ grid-template-columns: 1fr 1fr; }
+    .search{ width: 100%; }
+    .table-scroll{ max-height: calc(100vh - 260px); }
+    th, td{ padding: 6px 7px; font-size: 12px; }
+    .settingsgrid{ gap: 14px; }
+    .toast{ left: 14px; right: 14px; bottom: 14px; text-align:center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">在庫チェックツール<small>店舗別在庫 → 商品別に整理</small></div>
+    <button class="navbtn active" data-tab="weekly">今週分を取り込む <span class="badge" id="navBadgeWeekly" style="display:none">!</span></button>
+    <button class="navbtn" data-tab="review">確認が必要な項目 <span class="badge" id="navBadgeReview" style="display:none">0</span></button>
+    <button class="navbtn" data-tab="product">商品別の推移</button>
+    <button class="navbtn" data-tab="setup">初期データ読み込み</button>
+    <button class="navbtn" data-tab="export">Excel書き出し</button>
+    <button class="navbtn" data-tab="settings">判定の基準</button>
+    <div class="sidebar-foot" id="sidebarFoot">読み込み中...</div>
+  </div>
+
+  <div class="main">
+    <div id="tab-weekly"></div>
+    <div id="tab-review" style="display:none"></div>
+    <div id="tab-product" style="display:none"></div>
+    <div id="tab-setup" style="display:none"></div>
+    <div id="tab-export" style="display:none"></div>
+    <div id="tab-settings" style="display:none"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const PRODUCTS = ['クレンジング','クリーム','新美容液','旧美容液','化粧水','旧化粧水'];
+
+// Default positional column mapping for the weekly submission file.
+// Index = column position (0-based) in the uploaded sheet's header row.
+const DEFAULT_MAPPING = {
+  0: '店舗名',
+  1: 'グループ',
+  2: '旧美容液',
+  3: '新美容液',
+  4: '旧化粧水',
+  5: '化粧水',     // labeled 新化粧水 in the source file
+  6: 'クレンジング',
+  7: 'クリーム'    // labeled クレンジング in the source file (known input mistake)
+};
+
+let state = {
+  inventory: { weeks: [], stores: {}, values: {} }, // values[product][store][week] = number
+  reviewed: {},   // { "week|store|product": true }
+  settings: { flagIncrease: true, decreasePct: 50, minBase: 5 },
+  currentTab: 'weekly',
+  currentProduct: PRODUCTS[0],
+  pendingImport: null // { date, rows, mapping, headers }
+};
+
+// ---------- storage helpers (Supabase) ----------
+const SUPABASE_URL = 'https://rhpjjntxgbemqrdbdmyy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_eQMbb2aoA-57MDOhAktEtQ_l-KiT3rf';
+
+async function sbGet(key){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/app_storage?key=eq.${encodeURIComponent(key)}&select=value`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+  });
+  if (!res.ok) throw new Error(`読み込み失敗 (${res.status})`);
+  const data = await res.json();
+  return data.length ? data[0].value : null;
+}
+async function sbSet(key, value){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/app_storage`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify([{ key, value, updated_at: new Date().toISOString() }])
+  });
+  if (!res.ok) throw new Error(`保存失敗 (${res.status})`);
+}
+
+async function loadAll(){
+  try{
+    const inv = await sbGet('inventory');
+    if (inv) state.inventory = JSON.parse(inv);
+  }catch(e){ toast('データの読み込みに失敗しました: '+e.message); }
+  try{
+    const rv = await sbGet('reviewed');
+    if (rv) state.reviewed = JSON.parse(rv);
+  }catch(e){}
+  try{
+    const st = await sbGet('settings');
+    if (st) state.settings = JSON.parse(st);
+  }catch(e){}
+}
+async function saveInventory(){
+  try{ await sbSet('inventory', JSON.stringify(state.inventory)); }
+  catch(e){ toast('保存に失敗しました: '+e.message); }
+}
+async function saveReviewed(){
+  try{ await sbSet('reviewed', JSON.stringify(state.reviewed)); }
+  catch(e){ toast('保存に失敗しました: '+e.message); }
+}
+async function saveSettings(){
+  try{ await sbSet('settings', JSON.stringify(state.settings)); }
+  catch(e){ toast('保存に失敗しました: '+e.message); }
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=> t.classList.remove('show'), 2400);
+}
+
+// ---------- date helpers ----------
+function excelSerialToDate(v){
+  if (v instanceof Date) return v;
+  if (typeof v === 'number'){
+    const utcDays = Math.floor(v - 25569);
+    const utcValue = utcDays * 86400;
+    return new Date(utcValue * 1000);
+  }
+  if (typeof v === 'string'){
+    const d = new Date(v);
+    if (!isNaN(d)) return d;
+  }
+  return null;
+}
+function toISODate(d){
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function fmtDate(iso){
+  const [y,m,d] = iso.split('-');
+  return `${y}/${Number(m)}/${Number(d)}`;
+}
+
+// ---------- file reading ----------
+function readFileAsWorkbook(file){
+  return new Promise((resolve,reject)=>{
+    const isCsv = /\.csv$/i.test(file.name);
+    const reader = new FileReader();
+    reader.onerror = ()=> reject(new Error('ファイルを読み込めませんでした'));
+    if (isCsv){
+      reader.onload = ()=>{
+        try{ resolve(XLSX.read(reader.result, {type:'string', cellDates:true})); }
+        catch(e){ reject(e); }
+      };
+      reader.readAsText(file);
+    } else {
+      reader.onload = ()=>{
+        try{ resolve(XLSX.read(new Uint8Array(reader.result), {type:'array', cellDates:true})); }
+        catch(e){ reject(e); }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  });
+}
+function sheetToRows(ws){
+  return XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+}
+
+// ---------- anomaly detection ----------
+function classifyChange(oldVal, newVal){
+  const s = state.settings;
+  if (oldVal == null || newVal == null) return null;
+  if (s.flagIncrease && newVal > oldVal) return 'up';
+  if (oldVal > 0 && oldVal >= s.minBase){
+    const dropPct = (oldVal - newVal) / oldVal * 100;
+    if (newVal < oldVal && dropPct >= s.decreasePct) return 'down';
+  }
+  return null;
+}
+function isReviewed(week, store, product){
+  return !!state.reviewed[`${week}|${store}|${product}`];
+}
+function setReviewed(week, store, product, val){
+  const key = `${week}|${store}|${product}`;
+  if (val) state.reviewed[key] = true; else delete state.reviewed[key];
+}
+
+function prevWeekOf(week){
+  const weeks = state.inventory.weeks;
+  const idx = weeks.indexOf(week);
+  if (idx <= 0) return null;
+  return weeks[idx-1];
+}
+
+function allFlagsForWeek(week){
+  const out = [];
+  const inv = state.inventory;
+  if (!week) return out;
+  const prev = prevWeekOf(week);
+  if (!prev) return out;
+  for (const product of PRODUCTS){
+    const byStore = (inv.values[product]) || {};
+    for (const store of Object.keys(inv.stores)){
+      const oldVal = byStore[store] ? byStore[store][prev] : undefined;
+      const newVal = byStore[store] ? byStore[store][week] : undefined;
+      if (oldVal === undefined || newVal === undefined) continue;
+      const kind = classifyChange(oldVal, newVal);
+      if (kind){
+        out.push({ product, store, group: inv.stores[store], oldVal, newVal, kind, week });
+      }
+    }
+  }
+  return out;
+}
+
+function latestWeek(){
+  const w = state.inventory.weeks;
+  return w.length ? w[w.length-1] : null;
+}
+
+// ============================================================
+// TAB: setup (initial import of 在庫状況.xlsx)
+// ============================================================
+function renderSetup(){
+  const el = document.getElementById('tab-setup');
+  const inv = state.inventory;
+  el.innerHTML = `
+    <h1>初期データ読み込み</h1>
+    <p class="subtitle">これまでの「在庫状況.xlsx」を一度だけ読み込んで、商品ごとの過去データをこのツールに取り込みます。すでにデータがある場合は、新しく出てきた店舗・週だけが追加されます。</p>
+
+    <div class="panel">
+      <h2>現在のデータ状況</h2>
+      <div class="statgrid">
+        <div class="stat"><div class="num">${inv.weeks.length}</div><div class="lbl">記録されている週の数</div></div>
+        <div class="stat"><div class="num">${Object.keys(inv.stores).length}</div><div class="lbl">店舗数</div></div>
+        <div class="stat"><div class="num">${inv.weeks.length ? fmtDate(inv.weeks[inv.weeks.length-1]) : '―'}</div><div class="lbl">最新の週</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>在庫状況.xlsx を読み込む</h2>
+      <p class="desc">商品ごとにシートが分かれた既存の管理ファイルを選んでください（グループ・店舗名・週ごとの日付列という構成のシート）。</p>
+      <div class="row">
+        <input type="file" id="setupFile" accept=".xlsx,.xls">
+        <button class="btn" id="setupImportBtn">読み込む</button>
+      </div>
+      <div id="setupResult" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="panel">
+      <h2>データを消してやり直す</h2>
+      <p class="desc">取り込みを間違えた場合などに、記録されている全データを削除します（元には戻せません）。</p>
+      <button class="btn danger" id="resetBtn">全データを削除する</button>
+    </div>
+  `;
+
+  document.getElementById('setupImportBtn').onclick = async ()=>{
+    const f = document.getElementById('setupFile').files[0];
+    const resultEl = document.getElementById('setupResult');
+    if (!f){ resultEl.innerHTML = '<div class="warnbanner">ファイルが選ばれていません。</div>'; return; }
+    resultEl.innerHTML = '<div class="desc">読み込み中...</div>';
+    try{
+      const wb = await readFileAsWorkbook(f);
+      let newWeeks = 0, newStores = 0, matchedSheets = 0;
+      for (const product of PRODUCTS){
+        const sheetName = wb.SheetNames.find(n => n === product);
+        if (!sheetName) continue;
+        matchedSheets++;
+        const rows = sheetToRows(wb.Sheets[sheetName]);
+        if (!rows.length) continue;
+        const header = rows[0];
+        // header: [グループ, 店舗名, date, date, ...]
+        const dateCols = [];
+        for (let c=2; c<header.length; c++){
+          const d = excelSerialToDate(header[c]);
+          if (d) dateCols.push({col:c, iso: toISODate(d)});
+        }
+        if (!state.inventory.values[product]) state.inventory.values[product] = {};
+        for (let r=1; r<rows.length; r++){
+          const row = rows[r];
+          if (!row || row[1] == null || row[1] === '') continue;
+          const group = row[0];
+          const store = String(row[1]).trim();
+          if (!state.inventory.stores[store]){ state.inventory.stores[store] = group; newStores++; }
+          if (!state.inventory.values[product][store]) state.inventory.values[product][store] = {};
+          for (const dc of dateCols){
+            const val = row[dc.col];
+            if (val === null || val === undefined || val === '') continue;
+            const num = Number(val);
+            if (isNaN(num)) continue;
+            state.inventory.values[product][store][dc.iso] = num;
+            if (!state.inventory.weeks.includes(dc.iso)){ state.inventory.weeks.push(dc.iso); newWeeks++; }
+          }
+        }
+      }
+      state.inventory.weeks.sort();
+      await saveInventory();
+      resultEl.innerHTML = `<div class="tag ok">読み込み完了</div> シート一致 ${matchedSheets}/${PRODUCTS.length}・新しい店舗 ${newStores} 件・新しい週 ${newWeeks} 件を追加しました。`;
+      toast('初期データを取り込みました');
+      renderAll();
+    }catch(e){
+      resultEl.innerHTML = `<div class="warnbanner">読み込みに失敗しました: ${e.message}</div>`;
+    }
+  };
+
+  document.getElementById('resetBtn').onclick = async ()=>{
+    if (!confirm('本当にすべてのデータを削除しますか？この操作は取り消せません。')) return;
+    state.inventory = { weeks: [], stores: {}, values: {} };
+    state.reviewed = {};
+    await saveInventory();
+    await saveReviewed();
+    toast('データを削除しました');
+    renderAll();
+  };
+}
+
+// ============================================================
+// TAB: weekly upload
+// ============================================================
+function renderWeekly(){
+  const el = document.getElementById('tab-weekly');
+  const todayIso = toISODate(new Date());
+  el.innerHTML = `
+    <h1>今週分を取り込む</h1>
+    <p class="subtitle">店舗から提出されたファイル（xlsx / csv）をそのままアップロードしてください。商品別に振り分けて、前の週と比べておかしな変化がないかチェックします。</p>
+
+    <div class="panel">
+      <h2>1. ファイルを選ぶ</h2>
+      <div class="row">
+        <label class="field">対象週の日付
+          <input type="date" id="weekDate" value="${todayIso}">
+        </label>
+        <label class="field">提出ファイル
+          <input type="file" id="weeklyFile" accept=".xlsx,.xls,.csv">
+        </label>
+        <div style="align-self:flex-end;">
+          <button class="btn" id="parseBtn">読み込んで列を確認</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="mappingArea"></div>
+    <div id="flagPreviewArea"></div>
+  `;
+  document.getElementById('parseBtn').onclick = onParseWeeklyFile;
+}
+
+async function onParseWeeklyFile(){
+  const f = document.getElementById('weeklyFile').files[0];
+  const mappingArea = document.getElementById('mappingArea');
+  const flagArea = document.getElementById('flagPreviewArea');
+  flagArea.innerHTML = '';
+  if (!f){ mappingArea.innerHTML = '<div class="warnbanner">ファイルが選ばれていません。</div>'; return; }
+  mappingArea.innerHTML = '<div class="desc">読み込み中...</div>';
+  try{
+    const wb = await readFileAsWorkbook(f);
+    const sheetName = wb.SheetNames[0];
+    const rows = sheetToRows(wb.Sheets[sheetName]);
+    // find header row: first row containing 店舗名
+    let headerIdx = rows.findIndex(r => r && r.some(c => String(c).trim() === '店舗名'));
+    if (headerIdx === -1) headerIdx = 0;
+    const header = rows[headerIdx];
+    const dataRows = rows.slice(headerIdx+1).filter(r => r && r[0] != null && String(r[0]).trim() !== '');
+
+    state.pendingImport = { header, dataRows, mapping: {...DEFAULT_MAPPING} };
+    renderMappingUI(header);
+  }catch(e){
+    mappingArea.innerHTML = `<div class="warnbanner">読み込みに失敗しました: ${e.message}</div>`;
+  }
+}
+
+function renderMappingUI(header){
+  const mappingArea = document.getElementById('mappingArea');
+  const options = ['(使わない)','店舗名','グループ', ...PRODUCTS];
+  const mapping = state.pendingImport.mapping;
+
+  // sanity check vs default expectation
+  const expectedTexts = ['店舗名','グループ','旧美容液','新美容液','旧化粧水','新化粧水','クレンジング','クレンジング'];
+  const mismatch = header.some((h,i) => expectedTexts[i] !== undefined && String(h).trim() !== expectedTexts[i]);
+
+  let html = `<div class="panel">
+    <h2>2. 列の割り当てを確認</h2>
+    <p class="desc">各列がどの商品にあたるか確認してください。H列（2つ目の「クレンジング」表記）はクリームとして初期設定しています。</p>`;
+  if (mismatch){
+    html += `<div class="warnbanner">ヘッダーがいつもの形式と少し違うようです。下の割り当てが正しいか、念のため確認してください。</div>`;
+  }
+  html += `<div class="mapping-grid">`;
+  header.forEach((h, i)=>{
+    const current = mapping[i] || '(使わない)';
+    html += `<div class="map-item">
+      <div class="col-label">列 ${i+1}（元のラベル: ${h == null ? '―' : h}）</div>
+      <select data-colidx="${i}">
+        ${options.map(o => `<option value="${o}" ${o===current?'selected':''}>${o}</option>`).join('')}
+      </select>
+    </div>`;
+  });
+  html += `</div>
+    <button class="btn" id="applyMappingBtn">この割り当てで取り込む</button>
+  </div>`;
+  mappingArea.innerHTML = html;
+
+  mappingArea.querySelectorAll('select').forEach(sel=>{
+    sel.onchange = ()=>{
+      const idx = Number(sel.dataset.colidx);
+      state.pendingImport.mapping[idx] = sel.value === '(使わない)' ? null : sel.value;
+    };
+  });
+  document.getElementById('applyMappingBtn').onclick = applyWeeklyImport;
+}
+
+function applyWeeklyImport(){
+  const week = document.getElementById('weekDate').value;
+  if (!week){ toast('日付を選んでください'); return; }
+  const { dataRows, mapping } = state.pendingImport;
+
+  // locate column indices
+  let storeCol = null, groupCol = null;
+  const productCols = {};
+  Object.entries(mapping).forEach(([idx, label])=>{
+    idx = Number(idx);
+    if (label === '店舗名') storeCol = idx;
+    else if (label === 'グループ') groupCol = idx;
+    else if (PRODUCTS.includes(label)) productCols[label] = idx;
+  });
+  if (storeCol === null){ toast('店舗名の列を割り当ててください'); return; }
+
+  const newWeekValues = {}; // product -> store -> value
+  PRODUCTS.forEach(p => newWeekValues[p] = {});
+  const storesSeen = {};
+
+  dataRows.forEach(row=>{
+    const store = String(row[storeCol]).trim();
+    if (!store) return;
+    const group = groupCol !== null ? row[groupCol] : (state.inventory.stores[store] || '');
+    storesSeen[store] = group;
+    Object.entries(productCols).forEach(([product, colIdx])=>{
+      const raw = row[colIdx];
+      if (raw === null || raw === undefined || raw === '') return;
+      const num = Number(raw);
+      if (isNaN(num)) return;
+      newWeekValues[product][store] = num;
+    });
+  });
+
+  // stash as "staged" data on state for preview before commit
+  state.stagedWeek = { week, newWeekValues, storesSeen };
+  renderFlagPreview();
+}
+
+function renderFlagPreview(){
+  const flagArea = document.getElementById('flagPreviewArea');
+  const { week, newWeekValues, storesSeen } = state.stagedWeek;
+  const prev = prevWeekOf(week) || (state.inventory.weeks[state.inventory.weeks.length-1] || null);
+  // if week already exists as latest, use the week before it; otherwise compare to current latest week
+  const compareWeek = state.inventory.weeks.includes(week) ? prevWeekOf(week) : (state.inventory.weeks[state.inventory.weeks.length-1] || null);
+
+  const flags = [];
+  let totalCells = 0;
+  PRODUCTS.forEach(product=>{
+    Object.entries(newWeekValues[product]).forEach(([store, newVal])=>{
+      totalCells++;
+      const oldVal = compareWeek ? ((state.inventory.values[product]||{})[store]||{})[compareWeek] : undefined;
+      if (oldVal === undefined) return;
+      const kind = classifyChange(oldVal, newVal);
+      if (kind) flags.push({product, store, group: storesSeen[store], oldVal, newVal, kind});
+    });
+  });
+
+  let html = `<div class="panel">
+    <h2>3. 取り込み内容の確認</h2>
+    <div class="statgrid">
+      <div class="stat"><div class="num">${fmtDate(week)}</div><div class="lbl">対象週</div></div>
+      <div class="stat"><div class="num">${totalCells}</div><div class="lbl">読み取った件数</div></div>
+      <div class="stat"><div class="num">${flags.length}</div><div class="lbl">要確認の件数</div></div>
+    </div>`;
+
+  if (flags.length){
+    html += `<div class="table-scroll" style="margin-top:10px;"><table><thead><tr>
+      <th>判定</th><th>商品</th><th>店舗</th><th>グループ</th><th>前週</th><th>今週</th><th>差分</th>
+    </tr></thead><tbody>`;
+    flags.forEach(f=>{
+      const diff = f.newVal - f.oldVal;
+      html += `<tr>
+        <td>${f.kind==='up' ? '<span class="tag warn">▲ 増加</span>' : '<span class="tag danger">▼ 急減</span>'}</td>
+        <td>${f.product}</td><td>${f.store}</td><td>${f.group||''}</td>
+        <td class="numcell">${f.oldVal}</td><td class="numcell">${f.newVal}</td>
+        <td class="numcell">${diff>0?'+':''}${diff}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  } else {
+    html += `<div class="desc" style="margin-top:10px;">前週と比べて、明らかにおかしな変化は見つかりませんでした。</div>`;
+  }
+
+  html += `<div class="row" style="margin-top:16px;">
+    <button class="btn" id="commitWeekBtn">この週として保存する</button>
+    <span class="desc" style="margin:0;">保存すると「確認が必要な項目」タブにも反映されます。</span>
+  </div></div>`;
+  flagArea.innerHTML = html;
+
+  document.getElementById('commitWeekBtn').onclick = commitStagedWeek;
+}
+
+async function commitStagedWeek(){
+  const { week, newWeekValues, storesSeen } = state.stagedWeek;
+  const inv = state.inventory;
+  Object.entries(storesSeen).forEach(([store, group])=>{
+    if (!inv.stores[store]) inv.stores[store] = group;
+  });
+  PRODUCTS.forEach(product=>{
+    if (!inv.values[product]) inv.values[product] = {};
+    Object.entries(newWeekValues[product]).forEach(([store, val])=>{
+      if (!inv.values[product][store]) inv.values[product][store] = {};
+      inv.values[product][store][week] = val;
+    });
+  });
+  if (!inv.weeks.includes(week)){ inv.weeks.push(week); inv.weeks.sort(); }
+  await saveInventory();
+  toast(`${fmtDate(week)} の週を保存しました`);
+  state.stagedWeek = null;
+  state.pendingImport = null;
+  renderAll();
+  switchTab('review');
+}
+
+// ============================================================
+// TAB: review (flags for latest week, across all weeks not yet reviewed)
+// ============================================================
+function renderReview(){
+  const el = document.getElementById('tab-review');
+  const inv = state.inventory;
+  if (inv.weeks.length < 2){
+    el.innerHTML = `<h1>確認が必要な項目</h1><div class="panel"><div class="empty">比較できる週がまだ2週分ありません。「今週分を取り込む」からデータを追加してください。</div></div>`;
+    return;
+  }
+  // only compare the latest week against the one before it
+  const latest = inv.weeks[inv.weeks.length - 1];
+  const allFlags = allFlagsForWeek(latest);
+  const unreviewed = allFlags.filter(f => !isReviewed(f.week, f.store, f.product));
+  const reviewedList = allFlags.filter(f => isReviewed(f.week, f.store, f.product));
+
+  el.innerHTML = `
+    <h1>確認が必要な項目</h1>
+    <p class="subtitle">最新週(${fmtDate(inv.weeks[inv.weeks.length-1])})を、その前の週と比べています。入力ミスの可能性があれば店舗に確認してください。</p>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+        <div class="statgrid" style="flex:1;">
+          <div class="stat"><div class="num">${unreviewed.length}</div><div class="lbl">未確認</div></div>
+          <div class="stat"><div class="num">${reviewedList.length}</div><div class="lbl">確認済み</div></div>
+        </div>
+        <input class="search" type="text" id="reviewSearch" placeholder="店舗名で絞り込み">
+      </div>
+      <div class="table-scroll">
+        <table id="reviewTable"><thead><tr>
+          <th>週</th><th>判定</th><th>商品</th><th>店舗</th><th>グループ</th><th>前週</th><th>今週</th><th>差分</th><th>値を修正</th><th></th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  `;
+
+  function draw(filter){
+    const tbody = document.querySelector('#reviewTable tbody');
+    const rows = [...unreviewed, ...reviewedList]
+      .filter(f => !filter || f.store.includes(filter))
+      .sort((a,b)=> (a.week<b.week?1:-1));
+    if (!rows.length){ tbody.innerHTML = `<tr><td colspan="10"><div class="empty">該当する項目はありません。</div></td></tr>`; return; }
+    tbody.innerHTML = rows.map(f=>{
+      const reviewed = isReviewed(f.week, f.store, f.product);
+      const diff = f.newVal - f.oldVal;
+      return `<tr class="${reviewed?'cell-flag-reviewed':''}">
+        <td>${fmtDate(f.week)}</td>
+        <td>${f.kind==='up' ? '<span class="tag warn">▲ 増加</span>' : '<span class="tag danger">▼ 急減</span>'}</td>
+        <td>${f.product}</td><td>${f.store}</td><td>${f.group||''}</td>
+        <td class="numcell">${f.oldVal}</td><td class="numcell">${f.newVal}</td>
+        <td class="numcell">${diff>0?'+':''}${diff}</td>
+        <td>
+          <div class="row" style="gap:6px; flex-wrap:nowrap;">
+            <input type="number" class="fixInput" value="${f.newVal}" style="width:70px;"
+              data-week="${f.week}" data-store="${f.store}" data-product="${f.product}">
+            <button class="btn secondary small fixBtn" data-week="${f.week}" data-store="${f.store}" data-product="${f.product}">反映</button>
+          </div>
+        </td>
+        <td><button class="btn ${reviewed?'ghost':'secondary'} small reviewBtn" data-week="${f.week}" data-store="${f.store}" data-product="${f.product}" data-val="${reviewed?0:1}">${reviewed?'未確認に戻す':'確認済みにする'}</button></td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('.reviewBtn').forEach(btn=>{
+      btn.onclick = async ()=>{
+        setReviewed(btn.dataset.week, btn.dataset.store, btn.dataset.product, btn.dataset.val==='1');
+        await saveReviewed();
+        renderReview();
+        updateNavBadges();
+      };
+    });
+    tbody.querySelectorAll('.fixBtn').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const { week, store, product } = btn.dataset;
+        const input = tbody.querySelector(`.fixInput[data-week="${week}"][data-store="${store}"][data-product="${product}"]`);
+        const newVal = Number(input.value);
+        if (input.value === '' || isNaN(newVal)){ toast('正しい数値を入力してください'); return; }
+        if (!state.inventory.values[product]) state.inventory.values[product] = {};
+        if (!state.inventory.values[product][store]) state.inventory.values[product][store] = {};
+        state.inventory.values[product][store][week] = newVal;
+        await saveInventory();
+        setReviewed(week, store, product, true);
+        await saveReviewed();
+        toast(`${store} / ${product} / ${fmtDate(week)} を ${newVal} に修正しました`);
+        renderReview();
+        updateNavBadges();
+      };
+    });
+  }
+  draw('');
+  document.getElementById('reviewSearch').oninput = (e)=> draw(e.target.value.trim());
+}
+
+// ============================================================
+// TAB: product history table
+// ============================================================
+function renderProduct(){
+  const el = document.getElementById('tab-product');
+  const inv = state.inventory;
+  const product = state.currentProduct;
+
+  let html = `<h1>商品別の推移</h1>
+    <p class="subtitle">店舗ごとの週次推移です。最新週を左端(太字)に固定し、右にいくほど過去の週になります。前週から増えたセルは黄色、大きく減ったセルは黒で示しています。</p>
+    <div class="row" style="margin-bottom:14px;">
+      <select id="productSelect">
+        ${PRODUCTS.map(p=>`<option value="${p}" ${p===product?'selected':''}>${p}</option>`).join('')}
+      </select>
+      <input class="search" type="text" id="productSearch" placeholder="店舗名で絞り込み">
+    </div>`;
+
+  if (!inv.weeks.length){
+    html += `<div class="panel"><div class="empty">まだデータがありません。「初期データ読み込み」または「今週分を取り込む」から追加してください。</div></div>`;
+    el.innerHTML = html;
+    document.getElementById('productSelect').onchange = (e)=>{ state.currentProduct = e.target.value; renderProduct(); };
+    return;
+  }
+
+  html += `<div class="panel" style="padding:0;">
+    <div class="table-scroll">
+      <table id="productTable"><thead><tr>
+        <th style="position:sticky;left:0;top:0;background:var(--panel);z-index:2;">店舗名</th>
+        <th style="background:var(--panel);">グループ</th>
+        ${[...inv.weeks].reverse().map((w,i)=>`<th class="numcell ${i===0?'col-latest':''}">${fmtDate(w)}${i===0?' (最新)':''}</th>`).join('')}
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>`;
+  el.innerHTML = html;
+
+  function draw(filter){
+    const tbody = document.querySelector('#productTable tbody');
+    const stores = Object.keys(inv.stores).filter(s=> !filter || s.includes(filter)).sort();
+    if (!stores.length){ tbody.innerHTML = `<tr><td colspan="${inv.weeks.length+2}"><div class="empty">該当する店舗はありません。</div></td></tr>`; return; }
+    const byStore = inv.values[product] || {};
+    const weeksDesc = [...inv.weeks].reverse(); // latest first
+    tbody.innerHTML = stores.map(store=>{
+      const rowVals = weeksDesc.map((w, di)=>{
+        const i = inv.weeks.length - 1 - di; // index in ascending weeks array
+        const val = byStore[store] ? byStore[store][w] : undefined;
+        const prevW = i>0 ? inv.weeks[i-1] : null;
+        const prevVal = prevW && byStore[store] ? byStore[store][prevW] : undefined;
+        let cls = di===0 ? 'col-latest' : '';
+        if (val !== undefined && prevVal !== undefined){
+          const kind = classifyChange(prevVal, val);
+          if (kind === 'up') cls += ' cell-flag-up';
+          if (kind === 'down') cls += ' cell-flag-down';
+          if (kind && isReviewed(w, store, product)) cls += ' cell-flag-reviewed';
+        }
+        return `<td class="numcell ${cls}">${val === undefined ? '' : val}</td>`;
+      }).join('');
+      return `<tr><td style="position:sticky;left:0;background:var(--panel);">${store}</td><td>${inv.stores[store]||''}</td>${rowVals}</tr>`;
+    }).join('');
+  }
+  draw('');
+  document.getElementById('productSearch').oninput = (e)=> draw(e.target.value.trim());
+  document.getElementById('productSelect').onchange = (e)=>{ state.currentProduct = e.target.value; renderProduct(); };
+}
+
+// ============================================================
+// TAB: export
+// ============================================================
+function renderExport(){
+  const el = document.getElementById('tab-export');
+  el.innerHTML = `
+    <h1>Excel書き出し</h1>
+    <p class="subtitle">これまでに取り込んだ全データを、商品ごとにシートを分けた元の形式で書き出します。</p>
+    <div class="panel">
+      <button class="btn" id="exportBtn">在庫状況.xlsxとして書き出す</button>
+    </div>
+  `;
+  document.getElementById('exportBtn').onclick = ()=>{
+    const inv = state.inventory;
+    if (!inv.weeks.length){ toast('書き出せるデータがありません'); return; }
+    const wb = XLSX.utils.book_new();
+    PRODUCTS.forEach(product=>{
+      const stores = Object.keys(inv.stores).sort();
+      const header = ['グループ','店舗名', ...inv.weeks.map(w=> new Date(w))];
+      const rows = [header];
+      stores.forEach(store=>{
+        const byStore = (inv.values[product]||{})[store] || {};
+        rows.push([inv.stores[store]||'', store, ...inv.weeks.map(w=> byStore[w] === undefined ? null : byStore[w])]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, product);
+    });
+    XLSX.writeFile(wb, '在庫状況.xlsx');
+    toast('ダウンロードを開始しました');
+  };
+}
+
+// ============================================================
+// TAB: settings
+// ============================================================
+function renderSettings(){
+  const el = document.getElementById('tab-settings');
+  const s = state.settings;
+  el.innerHTML = `
+    <h1>判定の基準</h1>
+    <p class="subtitle">「おかしな変化」として拾い上げる条件を調整できます。</p>
+    <div class="panel">
+      <div class="settingsgrid">
+        <label class="field">
+          <span><input type="checkbox" id="flagIncrease" ${s.flagIncrease?'checked':''}> 前週より増えていたら常に確認対象にする</span>
+        </label>
+        <label class="field">減少率のしきい値（%）
+          <input type="number" id="decreasePct" min="1" max="100" value="${s.decreasePct}" style="width:90px;">
+        </label>
+        <label class="field">この件数未満の場合は減少チェックをしない
+          <input type="number" id="minBase" min="0" value="${s.minBase}" style="width:90px;">
+        </label>
+        <button class="btn" id="saveSettingsBtn">保存する</button>
+      </div>
+      <p class="desc" style="margin-top:14px;">例: しきい値50%・最低件数5の場合、前週10個→今週4個（60%減）は対象になりますが、前週2個→今週0個は対象外になります。</p>
+    </div>
+  `;
+  document.getElementById('saveSettingsBtn').onclick = async ()=>{
+    state.settings.flagIncrease = document.getElementById('flagIncrease').checked;
+    state.settings.decreasePct = Number(document.getElementById('decreasePct').value) || 50;
+    state.settings.minBase = Number(document.getElementById('minBase').value) || 0;
+    await saveSettings();
+    toast('保存しました');
+    updateNavBadges();
+  };
+}
+
+// ============================================================
+// nav / tabs
+// ============================================================
+function switchTab(tab){
+  state.currentTab = tab;
+  document.querySelectorAll('.navbtn').forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
+  ['weekly','review','product','setup','export','settings'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
+  });
+}
+
+function updateNavBadges(){
+  const inv = state.inventory;
+  let flagCount = 0;
+  if (inv.weeks.length >= 2){
+    const latest = inv.weeks[inv.weeks.length - 1];
+    flagCount = allFlagsForWeek(latest).filter(f=>!isReviewed(f.week,f.store,f.product)).length;
+  }
+  const badge = document.getElementById('navBadgeReview');
+  if (flagCount > 0){ badge.style.display='inline-block'; badge.textContent = flagCount; }
+  else { badge.style.display='none'; }
+
+  const foot = document.getElementById('sidebarFoot');
+  foot.textContent = inv.weeks.length ? `最新: ${fmtDate(inv.weeks[inv.weeks.length-1])}・店舗 ${Object.keys(inv.stores).length}件` : 'データ未登録';
+}
+
+function renderAll(){
+  renderWeekly();
+  renderReview();
+  renderProduct();
+  renderSetup();
+  renderExport();
+  renderSettings();
+  updateNavBadges();
+}
+
+document.querySelectorAll('.navbtn').forEach(btn=>{
+  btn.onclick = ()=> switchTab(btn.dataset.tab);
+});
+
+(async function init(){
+  await loadAll();
+  renderAll();
+  switchTab(state.inventory.weeks.length ? 'weekly' : 'setup');
+})();
+</script>
+</body>
+</html>
