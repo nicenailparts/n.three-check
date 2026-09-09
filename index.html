@@ -258,6 +258,7 @@ let state = {
   settings: { flagIncrease: true, decreasePct: 50, minBase: 5 },
   currentTab: 'weekly',
   currentProduct: PRODUCTS[0],
+  productSearch: '',
   pendingImport: null // { date, rows, mapping, headers }
 };
 
@@ -831,7 +832,7 @@ function renderProduct(){
       <select id="productSelect">
         ${PRODUCTS.map(p=>`<option value="${p}" ${p===product?'selected':''}>${p}</option>`).join('')}
       </select>
-      <input class="search" type="text" id="productSearch" placeholder="店舗名で絞り込み">
+      <input class="search" type="text" id="productSearch" placeholder="店舗名で絞り込み" value="${state.productSearch || ''}">
     </div>`;
 
   if (!inv.weeks.length){
@@ -876,8 +877,8 @@ function renderProduct(){
       return `<tr><td style="position:sticky;left:0;background:var(--panel);">${store}</td><td>${inv.stores[store]||''}</td>${rowVals}</tr>`;
     }).join('');
   }
-  draw('');
-  document.getElementById('productSearch').oninput = (e)=> draw(e.target.value.trim());
+  draw(state.productSearch || '');
+  document.getElementById('productSearch').oninput = (e)=>{ state.productSearch = e.target.value.trim(); draw(state.productSearch); };
   document.getElementById('productSelect').onchange = (e)=>{ state.currentProduct = e.target.value; renderProduct(); };
 }
 
